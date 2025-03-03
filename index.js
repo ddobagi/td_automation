@@ -31,19 +31,3 @@ app.get('/run-python', (req, res) => {
 app.listen(PORT, () => {
   console.log("Server is running");
 });
-
-
-/// script.py 실행을 위한 코드 
-const { exec } = require("child_process");
-
-exec("python script.py", (error, stdout, stderr) => {
-    if (error) {
-        console.error(`Error: ${error.message}`);
-        return;
-    }
-    if (stderr) {
-        console.error(`stderr: ${stderr}`);
-        return;
-    }
-    console.log(`Python Output: ${stdout}`);
-});
