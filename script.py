@@ -9,6 +9,7 @@ from googleapiclient.discovery import build
 from google.auth.transport.requests import Request
 
 import time
+import json
 import os
 import imaplib
 import email as email_lib
@@ -18,11 +19,11 @@ import re
 import pytz
 
 # Google Sheets API 인증
-SERVICE_ACCOUNT_FILE = "/home/livefornow2425/google_sheets_api_credential.json"
- # 인증 파일 경로
+SERVICE_ACCOUNT_JSON = os.getenv("GOOGLE_SHEETS_CREDENTIALS")
 SCOPES = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 
-creds = service_account.Credentials.from_service_account_file(SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+creds = service_account.Credentials.from_service_account_info(json.loads(SERVICE_ACCOUNT_JSON), scopes=SCOPES)
+ # 인증 파일 경로
 
 if creds and creds.expired and creds.refresh_token:
     creds.refresh(Request())
