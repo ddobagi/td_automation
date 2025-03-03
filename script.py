@@ -7,7 +7,8 @@ def home():
     return "✅ Python script is running on Render!"
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)  # 포트 10000번 사용
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)  # 포트 10000번 사용
 
 
 # 눈물 겹다.... 
