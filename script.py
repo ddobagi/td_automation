@@ -1,4 +1,5 @@
 from flask import Flask
+import os
 
 app = Flask(__name__)
 
@@ -23,7 +24,6 @@ from google.auth.transport.requests import Request
 
 import time
 import json
-import os
 import imaplib
 import email as email_lib
 from email.utils import parsedate_to_datetime
