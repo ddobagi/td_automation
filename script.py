@@ -51,6 +51,8 @@ email_management_list_cache = None
 email_management_list_last_fetched = None
 email_management_list_cache_ttl = 10800  # 3시간 캐시 타임
 
+request_count = 0
+
 def log_request():
     global request_count
     request_count += 1
