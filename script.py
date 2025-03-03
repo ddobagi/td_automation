@@ -1,17 +1,3 @@
-from flask import Flask
-import os
-
-app = Flask(__name__)
-
-@app.route("/")
-def home():
-    return "✅ Python script is running on Render!"
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)  # 포트 10000번 사용
-
-
 # 눈물 겹다.... 
 import smtplib
 from email.mime.multipart import MIMEMultipart
@@ -23,6 +9,7 @@ from googleapiclient.discovery import build
 from google.auth.transport.requests import Request
 
 import time
+import os
 import json
 import imaplib
 import email as email_lib
