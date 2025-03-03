@@ -1,4 +1,4 @@
-# 눈물 겹다.... 
+# 눈물 겹다.... 제발 render야 힘을 내!
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
