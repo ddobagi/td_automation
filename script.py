@@ -1,3 +1,15 @@
+from flask import Flask
+
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "✅ Python script is running on Render!"
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)  # 포트 10000번 사용
+
+
 # 눈물 겹다.... 
 import smtplib
 from email.mime.multipart import MIMEMultipart
