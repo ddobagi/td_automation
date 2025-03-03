@@ -51,6 +51,13 @@ email_management_list_cache = None
 email_management_list_last_fetched = None
 email_management_list_cache_ttl = 10800  # 3시간 캐시 타임
 
+def log_request():
+    global request_count
+    request_count += 1
+    print(f"📌 Google Sheets API 요청 수: {request_count}")
+
+
+
 # 새롭게 추가됨, is_email_in_management_list 내용
 
 def fetch_email_management_list():
@@ -114,6 +121,7 @@ def send_email(subject, body, to_email):
         print(f'이메일 전송 성공: {to_email}')
     except Exception as e:
         print(f'이메일 전송 실패: {e}')
+    log_request()
 
 def get_latest_email_from_sheet():
     """스프레드시트에서 최근 이메일과 해당 행 번호를 캐싱된 데이터를 이용하여 반환"""
@@ -229,6 +237,7 @@ def process_identification_request_email():
         send_email(subject, body, latest_email)
         mark_email_as_processed(row)
         mark_request_as_processed(row)
+        log_request()
 
 def process_incoming_email():
     """수신된 이메일을 처리하여 재전송, identification requested 메일 도착 후 3분 이내 시점이면 ok"""
@@ -241,6 +250,7 @@ def process_incoming_email():
             send_email(verification_subject, received_body_added, last_requested_email)
     else:
         print("Process identification request email has not been executed in the last minute. Skipping the process.")
+    log_request()
 
 def mark_payment_as_processed(row):
     # worksheet 객체가 함수 외부에서 접근 가능하도록 수정
