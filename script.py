@@ -32,7 +32,8 @@ if creds and creds.expired and creds.refresh_token:
 client = gspread.authorize(creds)
 
 # 스프레드시트 열기
-spreadsheet = client.open("Identification Request")
+sheets_id = "1mzwPFpWZRyDblVmMwLaRtTvLLabV6p_sE6pHPROTsRY"
+spreadsheet = client.open_by_key(sheets_id)
 
 # 워크시트 선택
 worksheet = spreadsheet.get_worksheet(0)
