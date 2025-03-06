@@ -1,13 +1,10 @@
-# 눈물 겹다.... 제발 render야 힘을 내!
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import gspread
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
-
 from google.auth.transport.requests import Request
-
 import time
 import os
 import json
@@ -23,7 +20,6 @@ SERVICE_ACCOUNT_JSON = os.getenv("GOOGLE_SHEETS_CREDENTIALS")
 SCOPES = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 
 creds = service_account.Credentials.from_service_account_info(json.loads(SERVICE_ACCOUNT_JSON), scopes=SCOPES)
- # 인증 파일 경로
 
 if creds and creds.expired and creds.refresh_token:
     creds.refresh(Request())
@@ -42,6 +38,7 @@ worksheet = spreadsheet.get_worksheet(0)
 PROCESSED_COLUMN = 6
 PROCESSED_COLUMN_PAYMENT = 16
 PROCESSED_COLUMN_REQUEST = 9
+
 last_requested_email = None
 last_requested_timestamp = None
 last_processed_email_id = None
@@ -58,50 +55,33 @@ def log_request():
     request_count += 1
     print(f"📌 Google Sheets API 요청 수: {request_count}")
 
-
-
-# 새롭게 추가됨, is_email_in_management_list 내용
-
-def fetch_email_management_list():
-    """이메일 관리 리스트를 캐시하거나, 캐시에서 반환"""
+def fetch_email_management_list(force_refresh=False):
+    """이메일 관리 리스트를 캐싱하여 사용하며, 일정 주기(3시간)마다 새로 불러옴"""
     global email_management_list_cache, email_management_list_last_fetched
     current_time = time.time()
-    
-    if (email_management_list_cache is None or
-        email_management_list_last_fetched is None or
-        current_time - email_management_list_last_fetched > email_management_list_cache_ttl):
+
+    if not force_refresh and email_management_list_cache and email_management_list_last_fetched:
+        if current_time - email_management_list_last_fetched < email_management_list_cache_ttl:
+            return email_management_list_cache
+
+    try:
+        service = build('sheets', 'v4', credentials=creds)
+        sheet = service.spreadsheets()
+        result = sheet.values().get(spreadsheetId='1JcG3bPyk7VLCevMJYWGWyXT5JcwM8Aex-KwoRiL8gFI', range='pass_management!R:R').execute()
         
-        SPREADSHEET_ID = '1JcG3bPyk7VLCevMJYWGWyXT5JcwM8Aex-KwoRiL8gFI'
-        RANGE_NAME = 'pass_management!R:R'
-        
-        try:
-            service = build('sheets', 'v4', credentials=creds)
-            sheet = service.spreadsheets()
-            result = sheet.values().get(spreadsheetId=SPREADSHEET_ID, range=RANGE_NAME).execute()
-            email_management_list_cache = [row[0] for row in result.get('values', [])]
-            email_management_list_last_fetched = current_time
-        except gspread.exceptions.APIError as e:
-            print(f"Google Sheets API 오류: {e}")
-            send_email("[Error] fetch_email_management_list에서 google sheets api 오류 발생", 
-                       "[Error] fetch_email_management_list에서 google sheets api 오류 발생", 
-                       "xx11chotae@gmail.com")
-            return []  # 오류 발생 시 빈 리스트 반환
-        except Exception as e:
-            print(f"예상치 못한 오류 발생 in fetch_email_management_list: {e}")
-            send_email("[Error] fetch_email_management_list에서 예상치 못한 오류 발생", 
-                       "[Error] fetch_email_management_list에서 예상치 못한 오류 발생", 
-                       "xx11chotae@gmail.com")
-            return []  # 오류 발생 시 빈 리스트 반환
+        log_request()  # ✅ API 호출 카운트 추가
 
-    return email_management_list_cache
+        email_management_list_cache = [row[0] for row in result.get('values', [])]
+        email_management_list_last_fetched = current_time
+        return email_management_list_cache
 
-
+    except gspread.exceptions.APIError as e:
+        print(f"Google Sheets API 오류: {e}")
+        return email_management_list_cache if email_management_list_cache else []
 
 def is_email_in_management_list(email):
-    """이메일 관리 리스트에서 이메일 존재 여부 확인"""
-    email_list = fetch_email_management_list()
-    print("현재 유효 이메일 목록:", email_list)
-    return email in email_list
+    """이메일이 관리 리스트에 있는지 확인"""
+    return email in fetch_email_management_list()
 
 def send_email(subject, body, to_email):
     """이메일 전송 기능"""
@@ -109,11 +89,13 @@ def send_email(subject, body, to_email):
     smtp_port = 587
     sender_email = 'timelydrop.email@gmail.com'
     sender_password = 'nmtarxkezacupxcc'
+
     msg = MIMEMultipart()
     msg['From'] = sender_email
     msg['To'] = to_email
     msg['Subject'] = subject
     msg.attach(MIMEText(body, 'plain'))
+
     try:
         server = smtplib.SMTP(smtp_server, smtp_port)
         server.starttls()
@@ -123,46 +105,40 @@ def send_email(subject, body, to_email):
         print(f'이메일 전송 성공: {to_email}')
     except Exception as e:
         print(f'이메일 전송 실패: {e}')
-    log_request()
 
 def get_latest_email_from_sheet():
-    """스프레드시트에서 최근 이메일과 해당 행 번호를 캐싱된 데이터를 이용하여 반환"""
+    """최근 이메일 가져오기"""
     try:
-        column_e = worksheet.col_values(5)  # 5번째 열 (이메일 열) 읽기
-        processed_column = worksheet.col_values(PROCESSED_COLUMN)  # 처리 상태 열 읽기
+        values = worksheet.get('E2:E100', majorDimension='COLUMNS')
+        processed_values = worksheet.get('F2:F100', majorDimension='COLUMNS')
+
+        log_request()  # ✅ API 호출 카운트 추가
+
+        if not values or not values[0]:
+            return None, None
+
+        column_e = values[0]
+        processed_column = processed_values[0] if processed_values else []
+
+        for index in reversed(range(len(column_e))):
+            email = column_e[index].strip() if column_e[index] else None
+            if email and (len(processed_column) <= index or not processed_column[index].strip()):
+                return email, index + 2
+
     except gspread.exceptions.APIError as e:
         print(f"Google Sheets API 오류: {e}")
-        send_email("[Error] get_latest_email_from_sheet에서 google sheets api 오류 발생", 
-                   "[Error] get_latest_email_from_sheet에서 google sheets api 오류 발생", 
-                   "xx11chotae@gmail.com")
-        return None, None
-    except Exception as e:
-        print(f"예상치 못한 오류 발생 in get_latest_email_from_sheet: {e}")
-        send_email("[Error] get_latest_email_from_sheet에서 예상치 못한 오류 발생", 
-                   "[Error] get_latest_email_from_sheet에서 예상치 못한 오류 발생", 
-                   "xx11chotae@gmail.com")
-        return None, None
-
-    for index in reversed(range(len(column_e))):
-        email = column_e[index]
-        if email and (len(processed_column) <= index or not processed_column[index]):
-            return email, index + 1
-
     return None, None
-
-
 
 def mark_email_as_processed(row):
     try:
         worksheet.update_cell(row, PROCESSED_COLUMN, "Processed")
+        log_request()  # ✅ API 호출 카운트 추가
     except gspread.exceptions.APIError as e:
         print(f"Google Sheets API 오류: {e}")
         send_email("[Error] mark_email_as_processed에서 google sheets api 오류 발생","[Error] mark_email_as_processed에서 google sheets api 오류 발생", "xx11chotae@gmail.com")
     except Exception as e:
         print(f"예상치 못한 오류 발생 in mark_email_as_processed: {e}")
         send_email("[Error] mark_email_as_processed에서 예상치 못한 오류 발생","[Error] mark_email_as_processed에서 예상치 못한 오류 발생", "xx11chotae@gmail.com")
-
-
 
 
 def fetch_latest_sent_email(last_processed_email_id=None):
@@ -172,6 +148,9 @@ def fetch_latest_sent_email(last_processed_email_id=None):
     mail = imaplib.IMAP4_SSL("imap.gmail.com")
     mail.login(username, password)
     mail.select("inbox")
+
+    log_request()  # ✅ API 호출 카운트 추가
+
     result, data = mail.search(None, '(FROM "timelydrop.email@gmail.com" TO "timelydrop.email@gmail.com")')
     email_ids = data[0].split()
     if not email_ids:
@@ -260,6 +239,9 @@ def mark_payment_as_processed(row):
         payment_sheet = client.open_by_key('1jA52gS6N-I_8LrCmJnn2lXAZCE7NkGw95_HdLlEJJc8')
         worksheet = payment_sheet.worksheet('payment_list')
         worksheet.update_cell(row, PROCESSED_COLUMN_PAYMENT, "Processed")
+
+        log_request()  # ✅ API 호출 카운트 추가
+        
     except gspread.exceptions.APIError as e:
         print(f"Google Sheets API 오류 in mark_payment_as_processed: {e}")
         send_email("[Error] mark_payment_as_processed에서 google sheets api 오류 발생","[Error] mark_payment_as_processed에서 google sheets api 오류 발생", "xx11chotae@gmail.com")
@@ -268,48 +250,26 @@ def mark_payment_as_processed(row):
         send_email("[Error] mark_payment_as_processed에서 예상치 못한 오류 발생","[Error] mark_payment_as_processed에서 예상치 못한 오류 발생", "xx11chotae@gmail.com")
 
 def get_latest_payment_info():
-    """스프레드시트 'payment_list'에서 최근 결제 정보를 가져옴"""
+    """최신 결제 정보 가져오기"""
     try:
-        payment_sheet = client.open_by_key('1jA52gS6N-I_8LrCmJnn2lXAZCE7NkGw95_HdLlEJJc8').worksheet('payment_list')
-        column_f = payment_sheet.col_values(6)
-        column_m = payment_sheet.col_values(9)
-        column_d = payment_sheet.col_values(4)
-        processed_column = payment_sheet.col_values(PROCESSED_COLUMN_PAYMENT)
+        sheet = client.open_by_key('1jA52gS6N-I_8LrCmJnn2lXAZCE7NkGw95_HdLlEJJc8').worksheet('payment_list')
+        values = sheet.batch_get(['F2:F100', 'M2:M100', 'D2:D100', 'P2:P100'])
+
+        log_request()  # ✅ API 호출 카운트 추가
+
+        column_f = values[0][0] if values[0] else []
+        column_m = values[1][0] if values[1] else []
+        column_d = values[2][0] if values[2] else []
+        processed_column = values[3][0] if values[3] else []
+
+        for index in reversed(range(len(column_d))):
+            if column_f[index] and column_m[index] and column_d[index]:
+                if len(processed_column) <= index or processed_column[index].strip() != "Processed":
+                    if is_email_in_management_list(column_d[index]):
+                        return column_f[index], column_m[index], column_d[index], index + 2
+
     except gspread.exceptions.APIError as e:
         print(f"Google Sheets API 오류: {e}")
-        send_email("[Error] get_latest_payment_info에서 google sheets api 오류 발생", 
-                   "[Error] get_latest_payment_info에서 google sheets api 오류 발생", 
-                   "xx11chotae@gmail.com")
-        return None, None, None, None
-    except Exception as e:
-        print(f"예상치 못한 오류 발생 in get_latest_payment_info: {e}")
-        send_email("[Error] get_latest_payment_info에서 예상치 못한 오류 발생", 
-                   "[Error] get_latest_payment_info에서 예상치 못한 오류 발생", 
-                   "xx11chotae@gmail.com")
-        return None, None, None, None
-
-    if not column_f or not column_m or not column_d:
-        print("스프레드시트 열에서 데이터를 찾을 수 없습니다.")
-        return None, None, None, None
-
-    for index in reversed(range(len(column_d))):
-        payment_method = column_f[index]
-        total_amount_without_commission = column_m[index]
-        payment_email = column_d[index]
-        if payment_method and total_amount_without_commission and payment_email and \
-           (len(processed_column) <= index or processed_column[index].strip() != "Processed"):
-            if is_email_in_management_list(payment_email):
-                return payment_method, total_amount_without_commission, payment_email, index + 1
-            else:
-                subject = "[Timely Drop] Inappropriate Email"
-                body = ("We're sorry, but this email is not registered. \n"
-                        "Please submit 'Payment Form' again using the email you had entered in 'Timely Drop Service Pass Purchase Form.' \n\n"
-                        "Service Pass Purchase form: https://tally.so/r/w5LAyE \n\n"
-                        "Sincerely,\n"
-                        "Timely Drop")
-                send_email(subject, body, payment_email)
-                mark_payment_as_processed(index + 1)
-
     return None, None, None, None
 
 
@@ -331,21 +291,12 @@ def send_payment_email():
 s = 1
 
 def continuously_send_email():
-    global s  # 함수 내에서 전역 변수를 사용
-    if s > 29:  # s가 30 이상일 때 이메일 전송
-        subject = "Server is working!!"
-        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        body = f"Server is working!!\nTimestamp: {current_time}"
-        to_email = "xx11chotae@gmail.com"
-        
-        # 이메일 전송
-        send_email(subject, body, to_email)
-        
-        # s를 다시 0으로 초기화
+    global s
+    if s >= 30:
+        send_email("Server is working!!", f"Timestamp: {datetime.now()}", "xx11chotae@gmail.com")
         s = 0
     else:
-        # s 값 증가
-        s = s + 1
+        s += 1
 
 
 # 메인 루프
@@ -353,7 +304,10 @@ while True:
     process_identification_request_email()
     process_incoming_email()
     send_payment_email()
+
+    if request_count % 30 == 0:
+        fetch_email_management_list(force_refresh=True)
+    
     os.system("touch /tmp/keepalive")
     continuously_send_email()
-
     time.sleep(10)
