@@ -109,8 +109,8 @@ def send_email(subject, body, to_email):
 def get_latest_email_from_sheet():
     """최근 이메일 가져오기"""
     try:
-        values = worksheet.get_values('E2:E100', majorDimension='COLUMNS')
-        processed_values = worksheet.get_values('F2:F100', majorDimension='COLUMNS')
+        values = worksheet.get_values('E2:E100')
+        processed_values = worksheet.get_values('F2:F100')
 
         log_request()  # ✅ API 호출 카운트 추가
 
